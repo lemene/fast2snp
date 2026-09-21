@@ -1,0 +1,7 @@
+fast2snp
+sam2vcf
+fast2snp_kmercounts_walk_exp
+*.o
+*.d
+.vscode
+build

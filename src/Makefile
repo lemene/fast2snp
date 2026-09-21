@@ -17,17 +17,14 @@ OBJS := $(addprefix $(OBJ_DIR)/, $(notdir $(SRCS:.cpp=.o)))
 DEPS := $(patsubst %.o,%.d, $(OBJS))
 
 TARGET := $(BIN_DIR)/fast2snp
-SAM2VCF := $(BIN_DIR)/sam2vcf
 
 .PHONY: all clean bin
 
-all: $(TARGET) $(SAM2VCF)
+all: $(TARGET) 
 
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $@ $(CXXFLAGS) $(LDFLAGS)
 
-$(SAM2VCF): sam2vcf.cpp
-	$(CC) $(CXXFLAGS) -o $@ $<
 
 $(OBJ_DIR)/%.o: %.cpp
 	$(CC) $(CXXFLAGS) -c $< -o $@

@@ -1,105 +1,98 @@
-fast2snp
-========
 
-fast2snp is a fast and accurate reference-free tool for detecting heterozygous small variants (SNPs and indels) directly from sequencing reads. It constructs a de Bruijn graph from heterozygous k-mers and performs coverage-aware localized graph traversal to identify variant-containing bubbles, avoiding global graph traversal.
+# fast2snp
 
-Features
---------
+**fast2snp** is a fast and accurate reference-free tool for detecting heterozygous small variants (SNPs and indels) directly from sequencing reads. It constructs a coverage-filtered de Bruijn graph and performs heterozygosity-guided localized graph traversal to identify variant-containing bubbles, avoiding exhaustive global graph traversal.
 
-Reference-free: detects variants directly from reads without a reference genome.
-Heterozygous SNP and indel detection: identifies both variant types in a single run.
-Broad platform compatibility: works with Illumina short reads, PacBio HiFi, and ONT R10 long reads.
-Fast: achieves 2.3-16.6x speedup in CPU time compared to DiscoSnp++ across diverse datasets.
-Robust: maintains stable performance across varying sequencing depths and genome complexities.
+## Features
 
-Dependencies
-------------
+- **Reference-free**: Detects variants directly from reads without requiring a reference genome.
+- **Heterozygous SNP and Indel Detection**: Identifies both variant types in a single run.
+- **Broad Platform Compatibility**: Evaluated on Illumina short reads, PacBio HiFi, and ONT R10 long reads.
+- **Fast and Efficient**: Employs a localized processing strategy with aggressive in-memory indexing, significantly reducing CPU time while maintaining a highly efficient workflow (at the cost of moderately higher peak memory usage).
+- **Robust**: Maintains stable performance across varying sequencing coverages (optimized for $\ge$ 10x) and diverse genome complexities.
 
-C++17 compiler (e.g., g++)
-OpenMP
-KMC (https://github.com/refresh-bio/KMC)
-parallel-hashmap (https://github.com/greg7mdp/parallel-hashmap)
-Python 3
-SciPy, NumPy, pandas, pysam
+## Dependencies
 
-Installation
-------------
+- C++17 compiler (e.g., `g++`)
+- OpenMP
+- [KMC](https://github.com/refresh-bio/KMC) (k-mer counting)
+- [parallel-hashmap](https://github.com/greg7mdp/parallel-hashmap) (included as a git submodule)
+- Python 3 (for wrapper scripts and evaluation)
+- Python packages: `scipy`, `pysam`, `pandas`, `matplotlib`
 
+## Installation
+
+```bash
+# Clone the repository along with the parallel-hashmap submodule
 git clone --recurse-submodules https://github.com/lemene/fast2snp.git
 cd fast2snp
+
+# Compile the C++ core
 make
+```
+All scripts and compiled binaries will be placed in the `./build/bin/` directory.
 
-The compiled binary will be placed in ../build/bin/fast2snp. Add it to your PATH or call it with the full path.
+## Quick Start
 
-Quick Start
------------
+fast2snp can be run in a single step directly from raw sequencing reads. The provided wrapper script `run_fast2snp.py` automatically performs k-mer counting, heterozygous range estimation, and localized graph traversal to extract candidate variant bubbles.
 
-Step 1: Count k-mers with KMC
+```bash
+python run_fast2snp.py <reads.fastq.gz> -o ./out_dir -t 24
+```
+The final candidate variant bubbles can be found in `variant_calls/bubbles.snp`.
 
-kmc -k31 -m64 -t8 reads.fastq.gz kmc_db tmp_dir
+## Step-by-step execution
 
-Step 2: Estimate heterozygous k-mer range
+If you prefer to run the pipeline manually to inspect intermediate files or customize specific steps, follow the instructions below:
 
-python scripts/find_het_kmers.py kmc_db.histo -k 31 -o output_dir
+**Step 1: K-mer counting**
+```bash
+mkdir wrkdir
+kmc -cs65535 -k31 -t8 reads.fastq.gz kmc_db .
+```
+This step uses KMC to count the k-mers and generates the KMC database (`kmc_db`).
 
-This produces a plot and prints the estimated lowCov and highCov values.
+**Step 2: Heterozygous k-mer identification**
+```bash
+kmc_tools transform kmc_db histogram kmc_db.histo
+find_het_kmers.py kmc_db.histo -k31 -o .
+```
+This step generates a histogram and runs the estimation script. It will produce a plot named like `kmc_db_xx_yy.png`, where `xx` and `yy` represent the estimated lower and upper boundaries of the heterozygous k-mer range, respectively.
 
-Step 3: Run fast2snp
+**Step 3: Variant calling**
+```bash
+kmc_dump -ci <xx> kmc_db /dev/stdout | fast2snp -i - -l <xx> -r <yy> -t 8 -o .
+```
+In this step, the k-mers are streamed directly from the KMC database to `fast2snp` via a pipe. You can optionally specify advanced parameters such as `-N`, `-L`, and `-S` in this command. The final output (paired bubble sequences) will be saved in `bubbles.snp`.
 
-fast2snp -i kmc_db -l <lowCov> -r <highCov> -k 31 -t 8 -o output_dir
 
-Alternatively, use the wrapper script that performs all steps automatically:
+## Output
 
-python run_fast2snp.py -i reads.fastq.gz -k 31 -t 8 -o output_dir
-
-Input
------
-
-Reads: FASTQ file(s) (single-end or paired-end) or a KMC database prefix.
-k-mer size: default 31.
-Heterozygous coverage range: estimated from the k-mer spectrum or provided manually.
-
-Output
-------
-
-A FASTA file containing paired allele sequences for each detected variant.
-Each record contains two sequences: the reference allele and the alternative allele.
+fast2snp outputs a FASTA file located at `bubbles.snp`, containing paired allele sequences for each detected variant. Each bubble consists of two sequences representing the reference and alternative alleles.
 
 Example output:
-
->Bubble_1_SNP_Path1_Ext8
+```fasta
+>Bubble_1_SNP_Path1_Ext30
 ACGTACGTACGT...
->Bubble_1_SNP_Path2_Ext8
+>Bubble_1_SNP_Path2_Ext30
 ACGTTCGTACGT...
+```
 
-Parameters
-----------
+## Key Parameters
 
--i  KMC database prefix (or - for stdin)
--l  Lower bound of heterozygous coverage
--r  Upper bound of heterozygous coverage
--k  k-mer size (default: 31)
--t  Number of threads (default: 8)
--o  Output directory (default: current directory)
--e  Extension length (default: -1, auto)
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `-k` | k-mer size | 31 |
+| `-N` | Number of top paths retained per group during branch pruning | 20 |
+| `-L` | Maximum additional extension length (bounded for small variants) | 50 |
+| `-S` | Multiplier for standard deviation when computing the coverage fluctuation threshold ($\tau = \text{mean} + S \times \text{SD}$) | 3 |
+| `-t` | Number of threads | 8 |
 
-Evaluation
-----------
 
-Scripts for benchmarking and evaluation are provided in the scripts/ directory:
+## License
 
-extract_variants_from_bam.py: extracts variants from aligned BAM files for VCF generation.
-eval_with_happy.py: runs hap.py to benchmark fast2snp against truth sets.
-extract_vcf_from_mpileup.py: extracts candidate variants from mpileup output.
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.
 
-See the individual script headers for usage details.
+## Contact
 
-License
--------
-
-This project is released under the MIT License. See LICENSE for details.
-
-Contact
--------
-
-For questions or issues, please open an issue on GitHub or contact the corresponding author.
+For questions or issues, please open an issue on GitHub or contact the author (lemene@sina.com).

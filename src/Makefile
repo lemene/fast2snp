@@ -20,7 +20,7 @@ TARGET := $(BIN_DIR)/fast2snp
 
 .PHONY: all clean bin
 
-all: $(TARGET) 
+all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $@ $(CXXFLAGS) $(LDFLAGS)

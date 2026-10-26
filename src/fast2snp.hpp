@@ -181,10 +181,10 @@ public:
         }
 
         void resize(const Options& opts) {
-            if (walkers.size() > opts.MAX_WALKERS_SIZE) {
-                std::nth_element(walkers.begin(), walkers.begin()+opts.MAX_WALKERS_SIZE, walkers.end(), 
+            if (walkers.size() > opts.maxPaths) {
+                std::nth_element(walkers.begin(), walkers.begin()+opts.maxPaths, walkers.end(), 
                     [](const WalkState& a, const WalkState& b) { return a.totalDelta < b.totalDelta; });
-                walkers.resize(opts.MAX_WALKERS_SIZE);
+                walkers.resize(opts.maxPaths);
             }
         }
     };
@@ -242,7 +242,7 @@ public:
         }
 
         bool isValid(const Options& opts) {
-            return matchLen_ >= opts.extend && 
+            return (int)matchLen_ >= opts.extend && 
                 walkerA_->isValidBranch(offsetA_+matchLen_, opts) && 
                 walkerB_->isValidBranch(offsetB_+matchLen_, opts);
         }
@@ -260,7 +260,7 @@ public:
         std::string toString(size_t id, const Options& opts) const {
             std::ostringstream oss;
 
-            assert(matchLen_ >= opts.extend);
+            assert((int)matchLen_ >= opts.extend);
             size_t ext = std::min<size_t>(std::max<size_t>(opts.k - 1, opts.extend), opts.extend);
 
             oss << ">Bubble_" << id << "_" << type() << "_Path1_Ext" << ext

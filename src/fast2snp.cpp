@@ -253,7 +253,7 @@ void KmerProcessor::computeKmerDeltaStats() {
     }) / deltas.size();
 
     double deltaStdDev = std::sqrt(varianceDelta);
-    opts_.deltaThreshold = std::ceil(deltaMean + deltaStdDev * 3);
+    opts_.deltaThreshold = std::ceil(deltaMean + deltaStdDev * opts_.covSdMultiplier);
     std::cout << "delta Mean: " << deltaMean << " StdDev: " << deltaStdDev  << " Threshold: " << opts_.deltaThreshold << std::endl;
 }
 

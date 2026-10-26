@@ -23,50 +23,23 @@ def require_executable(executable_name):
         logging.error(f"{executable_name} is not found in PATH. Please install it and try again.")
         sys.exit(1)
 
-def parse_args():
+def parse_known_args():
     parser = argparse.ArgumentParser(
         description="fast2snp pipeline: reference-free small variant detection"
     )
-    
+
     # Required parameters
     parser.add_argument("input", nargs="+", help="Input files (space-separated *.fastq or *.fastq.gz)")
     
     # Optional parameters
     parser.add_argument("-k", "--kmer-size", type=int, default=31,
                         help="k-mer size (default: 31)")
-    parser.add_argument("-e", "--extend", type=int, default=-1,
-                        help="Extend value (default: -1, meaning (k-1)/4)")
-    parser.add_argument("-l", "--left", type=int, default=-1,
-                            help="Extend value (default: -1, meaning (k-1)/4)")
-    parser.add_argument("-r", "--right", type=int, default=-1,
-                            help="Extend value (default: -1, meaning (k-1)/4)")
-    parser.add_argument("-c", "--min-count", type=int, default=0,
-                        help="Minimum k-mer frequency (count) to load)")
-    parser.add_argument("-C", "--max-count", type=int, default=0,
-                        help="Maximum k-mer frequency (count) to load")
-    
-    parser.add_argument("-f", "--fluction-threshold", type=int, default=0,
-                        help="Coverage fluctuation threshold for detecting significant deviation from reference control along paths.")
     parser.add_argument("-t", "--threads", type=int, default=8,
                         help="Number of threads (default: 8)")
     parser.add_argument("-o", "--outdir", type=str, default='.',
                         help="Output directory (default: current directory)")
-    
-    # Advanced parameters
-    # parser.add_argument("-est", "--est-kmercov", type=str, default=None,
-    #                     help="Estimated k-mer coverage (default: auto-estimated)")
-    # parser.add_argument("-cutoff", "--cutoff", type=float, default=0.95,
-    #                     help="Cutoff threshold (default: 0.95)")
-    # parser.add_argument("-het", "--het", type=float, default=None,
-    #                     help="Initial heterozygosity (default: 0 or 0.12 based on -m)")
-    # parser.add_argument("-rho", "--rho", type=float, default=0.2,
-    #                     help="Initial rho value (default: 0.2)")
-    # parser.add_argument("-setleft", "--setleft", type=str, default=None,
-    #                     help="Left boundary of heterozygous region (default: auto-estimated)")
-    # parser.add_argument("-setright", "--setright", type=str, default=None,
-    #                     help="Right boundary of heterozygous region (default: auto-estimated)")
-    
-    return parser.parse_args()
+
+    return parser.parse_known_args()
 
 
 def get_kmer_dir(args):
@@ -100,7 +73,7 @@ def run_kmc(args):
         logging.info(f"Running KMC: counting k-mers with k={args.kmer_size}...")
         cmd = [
             "kmc",
-            f"-cs1100",
+            f"-cs65535",
             f"-k{args.kmer_size}",
             f"-t{args.threads}",
             f"@{kmc_input_list}",
@@ -125,9 +98,7 @@ def run_kmc_histogram(args):
             "transform",
             kmc_db,
             "histogram",
-            hist_file,
-            "-ci2",
-            "-cx1000"
+            hist_file
         ]
         logging.info("  " + " ".join(cmd))
         subprocess.run(cmd, check=True)
@@ -187,7 +158,7 @@ def parse_boundaries_from_pngs(args):
     
     return left, right
 
-def run_fast2snp(args, left, right):
+def run_fast2snp(args, left, right, cxx_args):
     """Run the core fast2snp variant caller."""
     snp_dir = get_snp_dir(args)
     kmc_db = get_kmc_db_path(args)
@@ -196,6 +167,7 @@ def run_fast2snp(args, left, right):
 
     if not os.path.exists(bubble_snp):
         logging.info("Running fast2snp variant calling...")
+        logging.info(f"  Using cxx_args: {cxx_args}")
         cmd = [
             "kmc_dump",
             f"-ci{left}",
@@ -208,10 +180,7 @@ def run_fast2snp(args, left, right):
             "-r", str(right),
             "-t", str(args.threads),
             "-o", snp_dir + "/",
-            "-e", str(args.extend),
-            "-c", str(args.min_count),
-            "-C", str(args.max_count),
-            "-f", str(args.fluction_threshold)
+            " ".join(cxx_args)
         ]
         logging.info("  " + " ".join(cmd))
         subprocess.run(" ".join(cmd), shell=True, check=True)
@@ -235,7 +204,7 @@ def step1_count_kmers(args):
     run_kmc_histogram(args)
     run_find_het_kmers(args)
 
-def step2_call_variants(args):
+def step2_call_variants(args, cxx_args):
     """Step 2: Call variants using fast2snp."""
 
     snp_dir = get_snp_dir(args)
@@ -244,17 +213,14 @@ def step2_call_variants(args):
     left, right = parse_boundaries_from_pngs(args)
     logging.info(f"Boundaries: left={left}, right={right}")
 
-    left = args.left if args.left > 0 else left
-    right = args.right if args.right > 0 else right
-    
-    run_fast2snp(args, left, right)
+    run_fast2snp(args, left, right, cxx_args)
     logging.info(f"\nPipeline complete.")
 def main():
-    args = parse_args()
+    args, cxx_args = parse_known_args()
     
     logging.info(f"Script directory: {SCRIPT_DIR}")
     step1_count_kmers(args)
-    step2_call_variants(args)
+    step2_call_variants(args, cxx_args)
 
 
 if __name__ == "__main__":

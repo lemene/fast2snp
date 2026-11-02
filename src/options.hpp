@@ -69,7 +69,7 @@ struct Options {
     std::string getDebug() const { return outputPath + "debug.txt"; }   
     std::string getCandSeedsFile() const { return outputPath + "cand_seeds.txt"; }   
     std::string getSeedsFile() const { return outputPath + "seeds.txt"; }   
-    size_t getMaxSteps() const { return k + maxExtend; }
+    size_t getMaxSteps() const { return k - 1 + maxExtend; }
     bool isHetCov(int cov) const { return cov >= lowCov && cov <= highCov; } 
 
     void setK(int k) const { 
@@ -89,7 +89,7 @@ struct Options {
     std::string outputPath = "./";
     mutable int extend = -1;
     std::string debugKmer = "";
-    size_t maxPaths = 20;
+    size_t maxPaths = 10;
     int maxExtend = 50;
     double minHetRatio = 0.5;
     double covSdMultiplier = 3.0;
